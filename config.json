@@ -1,0 +1,16 @@
+{
+  "is_stream": 1,
+  "save_video": 0,
+  "motion_detection": 1,
+  "min_area_motion_contour": 150,
+  "motion_treshold": 150,
+  "alert_delay": 5.0,
+  "video_source": "../datasets/Test.mp4",
+  "points_source": "../datasets/fence.yml",
+  "violation_frame_path": "../Violations",
+  "telegram_chat_id":"-361703536",
+  "bot_token":"748225256:AAFFhmHUnWHXnj8J4-gnbeLZNJXLw2F3jak",
+  "violation_seconds_to_wait": 0.0,
+  "alert_message": "Alert",
+  "start_frame": 0
+}
