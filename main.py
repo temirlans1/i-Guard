@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import yaml
 import numpy as np
 import cv2
@@ -6,24 +5,16 @@ import time
 import pickle
 import json
 import psycopg2
-import requests
-import telegram
 import threading
+# import telegram
+import multiprocessing
+import queue as queuelib
 from dbconfig import dbconfig
-
-
-
-last_time_sent = time.time()
-
+import os
 with open('config.json') as f:
     config = json.load(f)
 
-fn = config["video_source"]
-fn_yaml = config["points_source"]
-fn_out = r"../datasets/output.mp4"
-
-bot = telegram.Bot(token=config["bot_token"])
-
+# bot = telegram.Bot(token=config["bot_token"])
 
 def cross_product(A, B):
 	return A[0]*B[1] - A[1]*B[0]
@@ -54,7 +45,8 @@ def intersect(A, B):
 
     return False
 
-def sendMessage(image_path):
+def sendMessage(image_path, cam_id):
+    pass
     # url = "https://api.telegram.org/bot/sendMessage"
     # params = {"chat_id": ,
     #         "text": "Alert",
@@ -62,19 +54,21 @@ def sendMessage(image_path):
     #         }
 
     # response = requests.get(url, params = params)
-    bot.send_message(chat_id=config["telegram_chat_id"], text=config["alert_message"])
-    bot.send_photo(chat_id=config["telegram_chat_id"], photo=open(image_path, 'rb'))
+    # duration = 1  # seconds
+    # freq = 440  # Hz
+    # os.system('play -nq -t alsa synth {} sine {}'.format(duration, freq))
+    # bot.send_message(chat_id=config["telegram_chat_id"][cam_id], text=config["alert_message"])
+    # bot.send_photo(chat_id=config["telegram_chat_id"][cam_id], photo=open(image_path, 'rb'))
 
-def sendAlert(frame):
-    global last_time_sent
+def sendAlert(frame, cam_id):
     last_time_sent = time.time()
     print("Alert")
     imname = "/frame" + str(int(last_time_sent)) + ".jpg"
     im_path = config["violation_frame_path"] + imname
     cv2.imwrite(im_path, frame)
-    sql = """INSERT INTO fence_violations(violation_id ,frame_name, violation_time)
-    VALUES({},'{}', {});""".format(int(last_time_sent), imname, int(last_time_sent))
     
+    sql = """INSERT INTO fence_violations(violation_id ,frame_name, violation_time)
+    VALUES({},'{}', {});""".format((last_time_sent % 1000000) *len(config["video_sources"]) + cam_id, imname, int(last_time_sent))
     try:
         params = dbconfig()
         conn = psycopg2.connect(**params) # may need password
@@ -82,29 +76,15 @@ def sendAlert(frame):
         cur = conn.cursor()
         cur.execute(sql)
         cur.close()
-        send_thread = threading.Thread(target=sendMessage, args=(im_path,))
+        send_thread = threading.Thread(target=sendMessage, args=(im_path, cam_id))
         send_thread.start()
     finally:
         conn.close()
-    
+    return last_time_sent
 
-
-# Set capture device or file
-cap = cv2.VideoCapture(fn)
-if not config["is_stream"]:
-    video_info = {'fps':    cap.get(cv2.CAP_PROP_FPS),
-                'width':  int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-                'height': int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-                'fourcc': cap.get(cv2.CAP_PROP_FOURCC),
-                'num_of_frames': int(cap.get(cv2.CAP_PROP_FRAME_COUNT))}
-    cap.set(cv2.CAP_PROP_POS_FRAMES, config['start_frame']) # jump to frame
-
-# Define the codec and create VideoWriter object
-if config['save_video']:
-    fourcc = cv2.VideoWriter_fourcc(*'MP4V') # options: ('P','I','M','1'), ('D','I','V','X'), ('M','J','P','G'), ('X','V','I','D')
-    out = cv2.VideoWriter(fn_out, fourcc, 25.0, #video_info['fps'], 
-                          (2000, 1000))
-
+kernel_erode = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(3,3)) # morphological kernel
+#kernel_dilate = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(13,13)) # morphological kernel
+kernel_dilate = cv2.getStructuringElement(cv2.MORPH_RECT,(5,19))
 
 # Create Background subtractor
 if config['motion_detection']:
@@ -112,87 +92,127 @@ if config['motion_detection']:
     #fgbg = cv2.createBackgroundSubtractorKNN(history=100, dist2Threshold=800.0, detectShadows=False)
 
 # Read YAML data (parking space polygons)
-lines = []
-with open(fn_yaml, 'r') as stream:
-    line_data = yaml.load(stream)
-for line in line_data:
-    lines.append(tuple(line['points']))
-    
-lines = np.array(lines)
-    
 
+def captureCam(cam_id):
+    fn = config["video_sources"][cam_id]
+    fn_yaml = config["points_sources"][cam_id]
+    # Set capture device or file
+    cap = cv2.VideoCapture(fn)
 
+    queue = queuelib.Queue()
+    last_time_sent = time.time()
 
-kernel_erode = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(3,3)) # morphological kernel
-#kernel_dilate = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(13,13)) # morphological kernel
-kernel_dilate = cv2.getStructuringElement(cv2.MORPH_RECT,(5,19))
-frame_num = 0
-print("Video analysis started")
-last_clear_time = time.time()
-while(cap.isOpened()):
-    video_cur_frame = cap.get(cv2.CAP_PROP_POS_FRAMES) # Index of the frame to be decoded/captured next
-    
-    ret, frame = cap.read()
-    if ret == False:
-        print("Capture Error")
-        break
-    
-    frame_blur = cv2.GaussianBlur(frame.copy(), (5,5), 3)
-    frame_gray = cv2.cvtColor(frame_blur, cv2.COLOR_BGR2GRAY)
-    frame_out = frame.copy()
-    laplacian = cv2.Laplacian(frame_gray, cv2.CV_64F)
-    #cv2.imshow("Laplace", laplacian)
+    min_x = 10000
+    min_y = 10000
+    max_x = 0
+    max_y = 0
+
+    lines = []
+    with open(fn_yaml, 'r') as stream:
+        line_data = yaml.load(stream)
+    for line in line_data:
+        lines.append(tuple(line['points']))
+        min_x = min(min_x, line['points'][0][0], line['points'][1][0])
+        min_y = min(min_y, line['points'][0][1], line['points'][1][1])
+        max_x = max(max_y, line['points'][0][0], line['points'][1][0])
+        max_y = max(max_y, line['points'][0][1], line['points'][1][1])
+        
+    lines = np.array(lines)
+
     for line in lines:
-        li_x, li_y = (line[0][0], line[0][1]), (line[1][0], line[1][1])
-        cv2.line(frame_out, li_x, li_y, (255,0,0), 2)
-    
-    if config['motion_detection']:
-        fgmask = fgbg.apply(frame_blur)
-        bw = np.uint8(fgmask==255)*255    
-        bw = cv2.erode(bw, kernel_erode, iterations=1)
-        bw = cv2.dilate(bw, kernel_dilate, iterations=1)
-        #cv2.imshow("BW", bw)
-        (_, cnts, _) = cv2.findContours(bw.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        # loop over the contours
+        line[0][0] -= min_x - 50
+        line[1][0] -= min_x - 50
+        line[0][1] -= min_y - 50
+        line[1][1] -= min_y - 50
+ 
 
-        for c in cnts:
-            # if the contour is too small, ignore it
-            if cv2.contourArea(c) < config['min_area_motion_contour']:
-                continue
-            (x, y, w, h) = cv2.boundingRect(c)
-            amt = 0
-            cv2.rectangle(frame_out, (x, y), (x + w, y + h), (255, 0, 0), 2)
-          
-            for line in lines:
-                li_x, li_y = (line[0][0], line[0][1]), (line[1][0], line[1][1])
-                diagonal1 = ((x, y), (x + w, y + h))
-                diagonal2 = ((x + w, y), (x, y + h))
-                test_line = (li_x, li_y)
-                p1 = intersect(test_line, diagonal1)
-                p2 = intersect(test_line, diagonal2)
-                if(p1 or p2):
-                    amt += 1
-                    cv2.line(frame_out, li_x, li_y, (0,255,0), 2)
-                    
-            if amt == len(lines):
-                if abs(time.time() - last_clear_time) >= float(config["violation_seconds_to_wait"]) and abs(time.time() - last_time_sent) > float(config['alert_delay']):
-                    sendAlert(frame)
-            else:
-                last_clear_time = time.time()
+    print("Video analysis started")
+    last_clear_time = time.time()
+    alert_amt = 0
+    frame_amt = config["frame_num_thresh"]
+    for i in range(0, frame_amt):
+        queue.put(0)
+    frame_num = 0
+    while(cap.isOpened()):
+        frame_num += 1
+        if(frame_num % 50 == 0):
+            print(frame_num)
+        ret, frame = cap.read()
+        if ret == False:
+            print("Capture Error")
+            break
+        
+        
+        
+        frame = frame[min_y - 50: max_y + 50, min_x - 50:max_x + 50]
+        frame_blur = cv2.GaussianBlur(frame.copy(), (5,5), 3)
+        frame_out = frame.copy()
+        
+        for line in lines:
+            li_x, li_y = (line[0][0], line[0][1]), (line[1][0], line[1][1])
+            cv2.line(frame_out, li_x, li_y, (255,0,0), 2)
+        
+        if config['motion_detection']:
+            fgmask = fgbg.apply(frame_blur)
+            bw = np.uint8(fgmask==255)*255    
+            bw = cv2.erode(bw, kernel_erode, iterations=1)
+            bw = cv2.dilate(bw, kernel_dilate, iterations=1)
+            #cv2.imshow("BW", bw)
+            (_, cnts, _) = cv2.findContours(bw.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            # loop over the contours
+            is_alert = False
+            for c in cnts:
+                # if the contour is too small, ignore it
+                if cv2.contourArea(c) < config['min_area_motion_contour']:
+                    continue
+                (x, y, w, h) = cv2.boundingRect(c)
+                amt = 0
+                #cv2.rectangle(frame_out, (x, y), (x + w, y + h), (255, 0, 0), 2)
             
-    # write the output frame
-    # small_frame = cv2.resize(frame_out, (0,0), fx=0.5, fy=0.5) 
-    if config['save_video']:
-        out.write(frame_out)  
-    
-    # Display video
-    frame_out = cv2.resize(frame_out, (0,0), fx=0.5, fy=0.5) 
-    cv2.imshow('frame', frame_out)
-    #cv2.imshow('background mask', bw)
-    k = cv2.waitKey(1)
-    if k == ord('q'):
-        break
+                for line in lines:
+                    li_x, li_y = (line[0][0], line[0][1]), (line[1][0], line[1][1])
+                    diagonal1 = ((x, y), (x + w, y + h))
+                    diagonal2 = ((x + w, y), (x, y + h))
+                    test_line = (li_x, li_y)
+                    p1 = intersect(test_line, diagonal1)
+                    p2 = intersect(test_line, diagonal2)
+                    if(p1 or p2):
+                        amt += 1
+                        cv2.line(frame_out, li_x, li_y, (0,255,0), 2)
+                
+                if amt == len(lines):
+                    is_alert = True
+                    alert_amt += 1
+                    print(alert_amt, frame_amt)
+                    if (alert_amt / frame_amt >= config["alert_ratio"]) and (abs(time.time() - last_time_sent) >= float(config['alert_delay'])):
+                        last_time_sent = sendAlert(frame, cam_id)
+            queue.put(is_alert)
+            alert_amt -= int(queue.get())
+        # write the output frame
+        # small_frame = cv2.resize(frame_out, (0,0), fx=0.5, fy=0.5) 
+        
+        # Display video
+        #frame_out = cv2.resize(frame_out, (0,0), fx=0.5, fy=0.5) 
+        cv2.imshow('frame {}'.format(cam_id), frame_out)
+        #cv2.imshow('background mask', bw)
+        k = cv2.waitKey(1)
+        if k == ord('q'):
+            break
 
-cap.release()
-if config['save_video']: out.release()
-cv2.destroyAllWindows()
+    cap.release()
+    cv2.destroyAllWindows()
+
+if(len(config["video_sources"]) != len(config["points_sources"])):
+    print("Number of streams not equal to number of yml files")
+
+if __name__ == '__main__':
+    jobs = []
+    for i in range(len(config["video_sources"])):
+        process = multiprocessing.Process(target=captureCam, args=(i,))
+        jobs.append(process)
+
+    for j in jobs:
+        j.start()
+
+    for j in jobs:
+        j.join()
