@@ -1,0 +1,8 @@
+/CamFrames
+/__pycache__
+/Trash
+/faster_rcnn_inception_v2_coco_2018_01_28
+/alert_db.db
+/config.json
+*.spec
+*.ini

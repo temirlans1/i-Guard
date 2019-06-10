@@ -1,33 +1,31 @@
 {
     "is_stream": 1,
-    "save_video": 0,
     "motion_detection": 1,
     "min_area_motion_contour": 150,
     "motion_treshold": 150,
-    "alert_delay": 2.0,
+    "alert_delay": 1.0,
     "video_sources": [
-        "../datasets/Test.mp4",
-        "../datasets/nothing.mp4",
-        "../datasets/nothing.mp4"
+        "/home/temirlan/Documents/iGuard/datasets/longnight.avi",
+        "/home/temirlan/Documents/iGuard/datasets/longnight.avi"
     ],
     "points_sources": [
-        "../datasets/fence.yml",
-        "../datasets/nothing.yml",
-        "../datasets/nothing.yml"
+        "../datasets/coords0_60.yml",
+        "../datasets/coords2_14.yml"
     ],
     "violation_frame_path": "../Violations",
-    "telegram_chat_id": [
-        "-361703536",
-        "-361703536"
-    ],
+    "telegram_chat_id": "-361703536",
+    "to_mail": "inurtas1999@gmail.com",
     "bot_token": "748225256:AAFFhmHUnWHXnj8J4-gnbeLZNJXLw2F3jak",
-    "violation_seconds_to_wait": 0.0,
+    "violation_seconds_to_wait": 10.0,
     "frame_num_thresh": 20,
-    "alert_ratio": 0.3,
+    "human_threshold": 0.5,
+    "alert_ratio": 0.5,
     "alert_message": "Alert",
     "start_frame": 0,
-    "cam_frame_paths": [
-        "C:\\Projects\\ParkingSlotDetection\\FenceViolation\\Code\\CamFrames\\frame_cam0.jpg",
-        "C:\\Projects\\ParkingSlotDetection\\FenceViolation\\Code\\CamFrames\\frame_cam1.jpg"
-    ]
+    "frame_width": 50,
+    "vid_shape": [
+        500,
+        300
+    ],
+    "show_amt": 4
 }

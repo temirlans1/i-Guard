@@ -1,5 +1,14 @@
-import requests
-import cv2
-print(cv2.getBuildInformation())
-# response = requests.get("https://api.telegram.org/bot748225256:AAFFhmHUnWHXnj8J4-gnbeLZNJXLw2F3jak/getUpdates")
-# print(response.content)
+
+# from database import Database
+
+# db =  Database("alert_db.db")
+
+# db.delete_all()
+
+
+# data = db.select_all()
+
+# print(data)
+dict = {"hel": "mel", "bel" : "sel"}
+for key, val in dict.items():
+    print(key, val)
