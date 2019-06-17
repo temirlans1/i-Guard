@@ -25,6 +25,11 @@ class Database:
         row = self.cursor.fetchall()
         return row[0]
 
+    def select_with_offset(self, offset):
+        self.cursor.execute("SELECT * FROM violations LIMIT 100 OFFSET {} ;".format(offset))
+        rows = self.cursor.fetchall()
+        return rows
+
     def __del__(self):
         self.conn.close()
 
@@ -35,6 +40,7 @@ class Database:
             self.conn.execute("INSERT INTO violations VALUES(?, ?, ?, ?);", (id, frame_path, False, now))
             self.conn.commit()
         except:
+            print("Faled to insert to Database")
             pass
         return (id, False, now)
     

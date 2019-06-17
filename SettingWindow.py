@@ -61,7 +61,7 @@ class SettingWindow():
 
 
             k = len(self.vid_frames)
-            video = MyVideoCapture(vid_path, coord_path, k, self.config, [], [], None)
+            video = MyVideoCapture(vid_path, coord_path, k, self.config, None)
             
 
             if video.getOnlyFrame() is None:

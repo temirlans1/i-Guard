@@ -10,6 +10,7 @@ import tkinter
 import PIL.Image, PIL.ImageTk
 import telegram
 import queue as queuelib
+from database import Database
 #from sendMail import sendMail
 import os
 
@@ -66,9 +67,9 @@ class MyVideoCapture:
         imname = "/{}frame".format(self.cam_id) + str(int(self.last_time_sent)) + ".jpg"
         im_path = self.config["violation_frame_path"] + imname
         cv2.imwrite(im_path, frame)
-
         abspath = os.path.abspath(im_path)
-        self.alert_queue[0].append(abspath)
+        database = Database("alert_db.db")
+        database.insert(abspath)
 
         try:
             send_thread = threading.Thread(target= sendMessage, args=(im_path, self.last_time_sent, self.cam_id, self.config))
@@ -76,11 +77,10 @@ class MyVideoCapture:
         except:
             pass
             
-    def __init__(self, video_source, point_source, cam_id, config, panel):
-        #self.odapi = odapi
-        #self.alert_queue = alert_queue
+    def __init__(self, video_source, point_source, cam_id, config, odapi):
+        
+        self.odapi = odapi
         self.second_frame = False
-        self.panel = panel
         self.cam_id = cam_id
         self.config = config
         self.video_source = video_source
@@ -175,7 +175,7 @@ class MyVideoCapture:
         return frame
         
 
-    def get_frame(self, finished_amt, dont_show = False):
+    def getFrame(self):
         #try:
         ret, frame = self.cap.read()
         
@@ -185,7 +185,6 @@ class MyVideoCapture:
             ret = False
 
         if ret == False:
-            finished_amt[0] += 1
             return
         #frame_out = frame.copy()
         frame_out = frame.copy()
@@ -265,39 +264,6 @@ class MyVideoCapture:
                             if (abs(time.time() - self.last_time_sent) >= float(self.config['alert_delay'])):
                                 print("Alert")
                                 self.sendAlert([frame_out])
-                    
-
-            
-
-
-
-        if not dont_show:
-            img = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(cv2.cvtColor(cv2.resize(frame_out, (self.config["vid_shape"][0], self.config["vid_shape"][1])), cv2.COLOR_BGR2RGB)))
-            #img = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(cv2.cvtColor(cv2.resize(frame_out, (self.config["vid_shape"][0], self.config["vid_shape"][1])), cv2.COLOR_BGR2RGB)))
-            #canvas[self.cam_id].create_image(0, 0, image = photo[self.cam_id], anchor = tkinter.NW)
-            
-
-            self.panel[self.cam_id].configure(image = img)
-            
-            self.panel[self.cam_id].image = img
-            
-        finished_amt[0] += 1 
-
-    def showFrame(self, dont_show):
-
-        ret, frame_out = self.cap.read()
-        if not ret:
-            return 0
-
-        if not dont_show:
-            img = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(cv2.cvtColor(cv2.resize(frame_out, (self.config["vid_shape"][0], self.config["vid_shape"][1])), cv2.COLOR_BGR2RGB)))
-            #img = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(cv2.cvtColor(cv2.resize(frame_out, (self.config["vid_shape"][0], self.config["vid_shape"][1])), cv2.COLOR_BGR2RGB)))
-            #canvas[self.cam_id].create_image(0, 0, image = photo[self.cam_id], anchor = tkinter.NW)
-            
-
-            self.panel[self.cam_id].configure(image = img)
-            
-            self.panel[self.cam_id].image = img
         #except:
         #    finished_amt[0] += 1 
     # Release the video source when the object is destroyed

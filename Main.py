@@ -13,9 +13,9 @@ from database import Database
 from Notifications import Notifications
 from SettingWindow import SettingWindow
 from HumanDetection import DetectorAPI
+import multiprocessing
 #print(cv2.getBuildInformation())
 #print(cv2.cuda.getCudaEnabledDeviceCount)
-model_path = './faster_rcnn_inception_v2_coco_2018_01_28/frozen_inference_graph.pb'
 
 class App:
 
@@ -28,10 +28,6 @@ class App:
         self.panedwindow.pack(fill = tk.BOTH, expand = True)
 
         
-        
-        self.odapi = DetectorAPI(path_to_ckpt=model_path)
-
-
         #self.vid_frame = tk.Frame(self.panedwindow, width = 400,  height = 300, relief = tk.FLAT)
         
         #self.alert_frame = tk.Frame(self.panedwindow, width = 300,  height = 300, relief = tk.FLAT, bg = 'gray')
@@ -43,7 +39,7 @@ class App:
         self.load_alerts()
         self.load_video()
         
-        
+        self.proc_queue = []
 
         self.panedwindow.add(self.vid_frame, width = 1025)
         self.panedwindow.add(self.alert_frame, width = 50)
@@ -53,7 +49,9 @@ class App:
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.exit_time = False
 
+        self.check_alert()
         self.update()
+        
         
         self.window.mainloop()
 
@@ -62,7 +60,9 @@ class App:
         self.notes = []
         self.alert_label = tk.Label(self.alert_frame.viewPort, text = "Here are the alerts")
         self.alert_label.pack(side = tk.TOP)
-        for i, data in enumerate(self.db.select_all()):
+        all_data = self.db.select_all()
+        self.row_number = len(all_data)
+        for i, data in enumerate(all_data):
             note = Notifications(self.alert_frame.viewPort, self.db, from_db = True, db_data = data)
             note.button.pack(expand = 1, side = tk.BOTTOM)
             self.notes.append(note)
@@ -88,7 +88,7 @@ class App:
         self.settings_button = tk.Button(self.vid_frame.viewPort, text = "Settings", height = 2, relief = tk.FLAT, command = self.createSettings)
         self.settings_button.grid(row = 0, columnspan = 2)
         for i, video_source in enumerate(video_sources):
-            self.videos.append(MyVideoCapture(video_source, points_sources[i], i, self.config, self.panel, self.alert_queue, self.odapi))
+            self.videos.append(MyVideoCapture(video_source, points_sources[i], i, self.config, self.panel))
 
         
         for i, vid in enumerate(self.videos):
@@ -132,22 +132,22 @@ class App:
 
 
     def check_alert(self):
-        if len(self.alert_queue[0]) > 0:
-            for path in self.alert_queue[0]:
-                note = Notifications(self.alert_frame.viewPort, self.db, filepath = path)
-                note.button.pack(expand = 1, side = tk.BOTTOM)
-                self.notes.append(note)
-            self.alert_queue[0] = []
+        print(self.row_number)
+        data_rows = self.db.select_with_offset(self.row_number)
+        
+        for row in data_rows:
+            self.row_number += 1
+            note = Notifications(self.alert_frame.viewPort, self.db, from_db = True, db_data = row)
+            note.button.pack(expand = 1, side = tk.BOTTOM)
+            self.notes.append(note)       
+        
+        self.window.after(1000, self.check_alert)
 
     def update(self):
         n = len(self.videos)
-        
-        if self.finished_amt[0] < self.start_amt[0]:
-            self.window.after(self.delay, self.update) 
-        elif self.exit_time:
+        if self.exit_time:
             self.paused = True
         else:
-            self.check_alert()
             self.paused = False
             self.finished_amt = [0]
             self.start_amt = [0]
@@ -161,8 +161,8 @@ class App:
                 #process.start()
                 #self.start_amt[0] += 1
                 if self.videos[i] != None:
-                    self.start_amt[0] += 1
-                    self.videos[i].get_frame(self.finished_amt, dont_show)
+                    #self.start_amt[0] += 1
+                    self.videos[i].showFrame( dont_show)
             
             self.window.after(self.delay, self.update) 
         #self.window.after(10, self.check_thread)
@@ -216,10 +216,18 @@ class App:
 # Set environtment key
 os.environ["SENDGRID_API_KEY"] = "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"
 
+
+
 #Open App
+from newMain import analyze
+
+analyze_thread = multiprocessing.Process(target=analyze)
+analyze_thread.start()
+
 App(tk.Tk(), "Tkinter and OpenCV")
 
 
+analyze_thread.terminate()
 # import requests
 # import cv2
 # print(cv2.getBuildInformation())
