@@ -5,12 +5,12 @@
     "motion_treshold": 150,
     "alert_delay": 1.0,
     "video_sources": [
-        "/home/temirlan/Documents/iGuard/datasets/longnight.avi",
-        "/home/temirlan/Documents/iGuard/datasets/long.avi"
+        "/home/temirlan/Documents/iGuard/datasets/output1561139535.avi",
+        "/home/temirlan/Documents/iGuard/datasets/output1561139703.avi"
     ],
     "points_sources": [
-        "../datasets/coords0_60.yml",
-        "../datasets/coords1_39.yml"
+        "../datasets/coords2_56.yml",
+        "../datasets/coords4_86.yml"
     ],
     "violation_frame_path": "../Violations",
     "telegram_chat_id": "-361703536",
