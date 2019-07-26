@@ -132,7 +132,6 @@ class App:
 
 
     def check_alert(self):
-        print(self.row_number)
         data_rows = self.db.select_with_offset(self.row_number)
         
         for row in data_rows:
@@ -216,15 +215,24 @@ class App:
 # Set environtment key
 os.environ["SENDGRID_API_KEY"] = "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"
 
-
+def start_app():
+    App(tk.Tk(), "Tkinter and OpenCV")
 
 #Open App
 from newMain import analyze
 
+
+
 analyze_thread = multiprocessing.Process(target=analyze)
+desktop_thread = multiprocessing.Process(target=start_app)
+
+
+desktop_thread.start()
 analyze_thread.start()
 
-App(tk.Tk(), "Tkinter and OpenCV")
+desktop_thread.join()
+
+
 
 
 analyze_thread.terminate()

@@ -3,6 +3,7 @@ import threading
 import json
 from newVideoCap import MyVideoCapture
 from database import Database
+import cv2
 
 
 def analyze():
@@ -26,16 +27,33 @@ def analyze():
     def analyzeVid(idx):
         cap = videos[idx]
         while cap.cap.isOpened():
-            cap.getFrame()
+            frame_out = cap.getFrame()
+            if(frame_out is None):
+                continue
             if(len(alert_queue[0]) > 0):
                 print("Alert")
                 alert_queue[0] = []
+            if(frame_out.shape[0] > 0):
+                frame_out = cv2.resize(frame_out, (0, 0), fx = 0.5, fy = 0.5)
+                cv2.imshow("IGUARD", frame_out)
 
-    jobs = []
-    for idx in range( len(videos)):
-        process = threading.Thread(target= analyzeVid, args=(idx,))
-        process.start()
-        jobs.append(process)
+                k = cv2.waitKey(1)
+                if k == ord('q'):
+                    print("Cap is closed")
+                    cv2.destroyAllWindows()
+                    break
 
-    for job in jobs:
-        job.join()
+
+    analyzeVid(0)
+    #jobs = []
+    #for idx in range( len(videos)):
+    #    analyzeVid(idx)
+        #process = threading.Thread(target= analyzeVid, args=(idx,))
+        #process.start()
+        #jobs.append(process)
+
+    #for job in jobs:
+    #    job.join()
+
+if __name__ == "__main__":
+    analyze()

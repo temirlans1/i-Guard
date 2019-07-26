@@ -16,14 +16,13 @@ import os
 
 
 def sendMessage(image_path, timesec, cam_id, config):
-    pass
-    # sendMail(image_path, timesec, config["to_mail"])
-    # bot = telegram.Bot(token=config["bot_token"])
-    # duration = 1  # seconds
-    # freq = 440  # Hz
-    # os.system('play -nq -t alsa synth {} sine {}'.format(duration, freq))
-    # bot.send_message(chat_id=config["telegram_chat_id"], text=config["alert_message"])
-    # bot.send_photo(chat_id=config["telegram_chat_id"], photo=open(image_path, 'rb'))
+    #sendMail(image_path, timesec, config["to_mail"])
+    bot = telegram.Bot(token=config["bot_token"])
+    #duration = 1  # seconds
+    #freq = 440  # Hz
+    #os.system('play -nq -t alsa synth {} sine {}'.format(duration, freq))
+    bot.send_message(chat_id=config["telegram_chat_id"], text=config["alert_message"])
+    bot.send_photo(chat_id=config["telegram_chat_id"], photo=open(image_path, 'rb'))
 
 def cross_product(A, B):
 	return A[0]*B[1] - A[1]*B[0]
@@ -184,17 +183,17 @@ class MyVideoCapture:
         if(self.second_frame == False):
             ret = False
 
-        if ret == False:
-            return
+        
         #frame_out = frame.copy()
         frame_out = frame.copy()
         frame = frame[self.min_y : self.max_y, self.min_x : self.max_x]
         #frame = frame[self.min_y : self.max_y, self.min_x : self.max_x]
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         frame_blur = cv2.GaussianBlur(frame, (5,5), 3)
-        # for line in self.lines:
-        #     li_x, li_y = (line[0], line[1]), (line[2], line[3])
-        #     cv2.line(frame_out, li_x, li_y, (255,0,0), 2)
+
+        for line in self.lines:
+            li_x, li_y = (line[0] + self.min_x, line[1] + self.min_y), (line[2] + self.min_x, line[3] + self.min_y)
+            cv2.line(frame_out, li_x, li_y, (255,0,0), 2)
 
         # if not dont_show:
         #     img = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(cv2.cvtColor(cv2.resize(frame_out, (self.config["vid_shape"][0], self.config["vid_shape"][1])), cv2.COLOR_BGR2RGB)))
@@ -213,57 +212,86 @@ class MyVideoCapture:
             #cv2.imshow("BW", bw)
             #print(cv2.findContours(bw, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE))
             ( cnts, _) = cv2.findContours(bw, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            #cv2.rectangle(frame_out, (self.min_x, self.min_y), (self.max_x, self.max_y), (0, 255, 0), 2)
+            li1_x, li1_y, li2_x, li2_y = (0,0,0,0)
 
+            for line in self.lines:
+                li1_x, li1_y = (line[0] + self.min_x + 150, line[1] + self.min_y), (line[2] + self.min_x + 20, line[3] + self.min_y)
+                li2_x, li2_y = (line[0] + self.min_x - 150, line[1] + self.min_y), (line[2] + self.min_x - 20, line[3] + self.min_y)
 
-            if self.is_night:
-                # loop over the contours
-                is_alert = False
-                for c in cnts:
-                    # if the contour is too small, ignore it
-                    if cv2.contourArea(c) < self.config['min_area_motion_contour']:
-                        continue
-                    (x, y, w, h) = cv2.boundingRect(c)
-                    amt = 0
-                    cv2.rectangle(frame_out, (x + self.min_x, y + self.min_y), (x + self.min_x + w, y + self.min_y + h), (255, 0, 0), 2)
-                    
-                    for line in self.lines:
-                        li_x, li_y = (line[0], line[1]), (line[2], line[3])
-                        diagonal1 = ((x, y), (x + w, y + h))
-                        diagonal2 = ((x + w, y), (x, y + h))
-
-                        test_line = (li_x, li_y)
-
-                        p1 = intersect(test_line, diagonal1)
-                        p2 = intersect(test_line, diagonal2)
-                        if(p1 or p2):
-                            amt += 1
-                            #cv2.line(frame_out, li_x, li_y, (0,255,0), 2)
-                    
-                    if amt == len(self.lines):
-                        is_alert = True
-                        print(self.alert_amt, self.config["frame_num_thresh"], self.cam_id)
-                        if (self.alert_amt / self.config["frame_num_thresh"] >= self.config["alert_ratio"]) and (abs(time.time() - self.last_time_sent) >= float(self.config['alert_delay'])):
-                            self.sendAlert([frame_out])
-
-                self.queue.put(is_alert)
-                self.alert_amt += int(is_alert)
+            left_line = (li1_x, li1_y)
+            right_line = (li2_x, li2_y)
+            
+            #cv2.line(frame_out, li1_x, li1_y, (0,0,255), 2)
+            #cv2.line(frame_out, li2_x, li2_y, (0,0,255), 2)
+            if len(cnts) > 0:
+                self.queue.put(1)
+                self.alert_amt += 1
                 self.alert_amt -= int(self.queue.get())
-            else:
-                
-                if len(cnts) > 0 :
-                    boxes, scores, classes, num = self.odapi.processFrame(frame)
+                if (self.alert_amt / self.config["frame_num_thresh"] >= self.config["alert_ratio"]):
+                    # loop over the contours
+                    is_alert = False
+                    for c in cnts:
+                        # if the contour is too small, ignore it
+                        if cv2.contourArea(c) < self.config['min_area_motion_contour']:
+                            continue
+                        (x, y, w, h) = cv2.boundingRect(c)
+                        amt = 0
+                        #cv2.rectangle(frame_out, (x + self.min_x, y + self.min_y), (x + self.min_x + w, y + self.min_y + h), (255, 0, 0), 2)
 
-                    # Visualization of the results of a detection.
+                        diagonal1 = ((x + self.min_x, y + self.min_y), (x + self.min_x + w, y + self.min_y + h))
+                        diagonal2 = ((x + self.min_x + w, y + self.min_y), (x + self.min_x, y + self.min_y + h))
 
-                    for i in range(len(boxes)):
-                        # Class 1 represents human
-                        box = boxes[i]
-                        cv2.rectangle(frame_out,(box[1],box[0]),(box[3],box[2]),(255,0,0),2)
-                        if classes[i] == 1 and scores[i] > self.human_threshold:
-                            print("Human detected")
-                            if (abs(time.time() - self.last_time_sent) >= float(self.config['alert_delay'])):
-                                print("Alert")
-                                self.sendAlert([frame_out])
+                        #cv2.line(frame_out, diagonal1[0], diagonal1[1], (0,0,255), 2)
+                        #cv2.line(frame_out, diagonal2[0], diagonal2[1], (0,0,255), 2)
+                        
+                        left_int1 = intersect(left_line, diagonal1)
+                        left_int2 = intersect(left_line, diagonal2)
+
+                        right_int1 = intersect(right_line, diagonal1)
+                        right_int2 = intersect(right_line, diagonal2)
+
+
+                        if(left_int1 or left_int2 or right_int1 or right_int2):
+                            print("Motion crossed the line")
+                            amt += 1
+                            boxes, scores, classes, num = self.odapi.processFrame(frame)
+
+                            # Visualization of the results of a detection.
+
+                            for i in range(len(boxes)):
+                                # Class 1 represents human
+                                box = boxes[i]
+                                if classes[i] == 1 and scores[i] > self.human_threshold:
+                                    cv2.rectangle(frame_out,(box[1] + self.min_x, box[0] + self.min_y),(box[3] + self.min_x, box[2] + self.min_y),(0,0,255),2)
+                                    print("Human detected")
+                                    human_diag1 = (box[1] + self.min_x, box[0] + self.min_y),(box[3] + self.min_x, box[2] + self.min_y)
+                                    human_diag2 = (box[3] + self.min_x, box[0] + self.min_y),(box[1] + self.min_x, box[2] + self.min_y)
+
+                                    #cv2.line(frame_out, human_diag1[0], human_diag1[1], (0,0,255), 2)
+                                    #cv2.line(frame_out, human_diag2[0], human_diag2[1], (0,0,255), 2)
+                                    mainLine_x = 0
+                                    mainLine_y = 0
+                                    for line in self.lines:
+                                        mainLine_x, mainLine_y = (line[0] + self.min_x, line[1] + self.min_y), (line[2] + self.min_x, line[3] + self.min_y)
+
+                                    mainLine = (mainLine_x, mainLine_y)
+                                    
+                                    human_int1 = intersect(mainLine, human_diag1)
+                                    human_int2 = intersect(mainLine, human_diag2)
+
+                                    if(human_int1 or human_int2):
+                                        if (abs(time.time() - self.last_time_sent) >= float(self.config['alert_delay'])):
+                                            cv2.line(frame_out, mainLine_x, mainLine_y, (0,0,255), 2)
+                                            print("Human crossed the line")
+                                            print("Alert")
+                                            self.sendAlert([frame_out])
+                            #cv2.line(frame_out, li_x, li_y, (0,255,0), 2)
+            elif len(cnts) == 0:
+                self.queue.put(0)
+                self.alert_amt -= int(self.queue.get())
+        #return frame_out.copy()
         #except:
         #    finished_amt[0] += 1 
     # Release the video source when the object is destroyed

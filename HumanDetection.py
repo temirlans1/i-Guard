@@ -36,27 +36,26 @@ class DetectorAPI:
         self.num_detections = self.detection_graph.get_tensor_by_name('num_detections:0')
 
     def processFrame(self, image):
-        with self.lock:
-            # Expand dimensions since the trained_model expects images to have shape: [1, None, None, 3]
-            image_np_expanded = np.expand_dims(image, axis=0)
-            # Actual detection.
-            start_time = time.time()
-            (boxes, scores, classes, num) = self.sess.run(
-                [self.detection_boxes, self.detection_scores, self.detection_classes, self.num_detections],
-                feed_dict={self.image_tensor: image_np_expanded})
-            end_time = time.time()
+        # Expand dimensions since the trained_model expects images to have shape: [1, None, None, 3]
+        image_np_expanded = np.expand_dims(image, axis=0)
+        # Actual detection.
+        start_time = time.time()
+        (boxes, scores, classes, num) = self.sess.run(
+            [self.detection_boxes, self.detection_scores, self.detection_classes, self.num_detections],
+            feed_dict={self.image_tensor: image_np_expanded})
+        end_time = time.time()
 
-            print("Elapsed Time:", end_time-start_time)
+        print("Elapsed Time:", end_time-start_time)
 
-            im_height, im_width,_ = image.shape
-            boxes_list = [None for i in range(boxes.shape[1])]
-            for i in range(boxes.shape[1]):
-                boxes_list[i] = (int(boxes[0,i,0] * im_height),
-                            int(boxes[0,i,1]*im_width),
-                            int(boxes[0,i,2] * im_height),
-                            int(boxes[0,i,3]*im_width))
+        im_height, im_width,_ = image.shape
+        boxes_list = [None for i in range(boxes.shape[1])]
+        for i in range(boxes.shape[1]):
+            boxes_list[i] = (int(boxes[0,i,0] * im_height),
+                        int(boxes[0,i,1]*im_width),
+                        int(boxes[0,i,2] * im_height),
+                        int(boxes[0,i,3]*im_width))
 
-            return boxes_list, scores[0].tolist(), [int(x) for x in classes[0].tolist()], int(num[0])
+        return boxes_list, scores[0].tolist(), [int(x) for x in classes[0].tolist()], int(num[0])
 
     def close(self):
         self.sess.close()
